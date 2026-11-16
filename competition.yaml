@@ -1,0 +1,478 @@
+# Make Markdown rendering faster, the second running (markdown-render-speed-02): an instance-drawn program/v1
+# competition timed in a staged CPU-time heat, under strict transcripts. The entry is a dependency-free JavaScript
+# module, parse.js, whose parse(markdown) returns exactly the HTML marked 18.1.3 renders with its default options (GFM
+# on), and main.ts, the program the harness runs: it reads /input/cases.json and writes /output/html.json. Every case
+# must be identical before speed counts (the gate, harness.gate passed); the fastest passing entrants on their graded
+# runs are the contenders (harness.timing.staged), raced on CPU time net of the null-entry control
+# (contracts/competition.ts ProgramTiming, grader/code-heat.ts). Validated by server/competitions/load.ts against
+# contracts/competition.ts.
+#
+# THE ASK. The owner, 2026-11-15, right after asking for ai-excited-01: "then another contest that goes live
+# immediately too that is $250 prize to top 20 participants with strict mode that is "Make Markdown rendering
+# faster"": $250 to the top 20, strict transcripts (submission_rule.strict_transcripts: true, transcripts_required:
+# true, authorship: 12), opened as soon as it can be; the 24-hour window is this build's assumption (the owner named
+# no length here; ai-excited-01's ask named 24h). markdown-render-speed-01 was removed from production before it opened (2026-11-07, the owner: a
+# winner would not beat the public alternatives, markdown-it and micromark; tests/unit/catalogue.test.ts REMOVED_SPEED);
+# this relaunch is the owner's call over that ruling. Why the winner is still useful: the task is a drop-in, the exact
+# HTML marked renders, and no public renderer is one. markdown-it, micromark, commonmark.js, pulldown-cmark and md4c
+# each render their own HTML (other escapes, other list and table markup, other edge cases), so a site that renders
+# with marked cannot swap one in without changing its pages; the best public way to render marked's HTML is marked
+# itself, the house baseline here, and a prize needs beating it at 95% confidence.
+#
+#   generator/          node22, sealed (generator_sha256): draws a set of cases from /input/seed.json (a drand
+#                       round's seed, server/competitions/instance.ts) into /output/input/cases.json (every
+#                       CommonMark 0.31.2 and GFM 0.29 extension example, spec/examples.json, and 40 generated
+#                       READMEs, readme.ts, from the stream rng.ts derives from the seed) and
+#                       /output/reference/expected.json (marked's HTML for each case); vendor/marked/ is marked
+#                       18.1.3's lib/marked.esm.js and LICENSE byte for byte (MIT) with a NOTICE
+#   scorer/main.ts      node22, sealed (scorer_sha256): compares /output/html.json with expected.json case by case,
+#                       exactly, and writes {passed, cases_passed, cases_total} with a checks row per spec section and
+#                       per document
+#   baseline/           the house baseline: marked itself (the same two vendored files) behind main.ts and parse.js;
+#                       house.yaml names it, so the automation enters it 4 hours before the deadline, never at the
+#                       opening (server/competitions/house-entry-due.ts)
+#   instance.yaml       the sidecar, written by scripts/competitions/instance.ts practice: the practice round (drand
+#                       quicknet 33735412, 2026-11-07T00:00:00Z, before any opening; the seed is the round's alone, so
+#                       the practice set is -01's, digests 350e7060... and 0037fb03...), its signature, the practice
+#                       set's digests, the scored round (the first emitted at or after the final phase's start) and the
+#                       generator's limits (the bundle's)
+#
+# scorer/, generator/ and baseline/ are markdown-render-speed-01's byte for byte (cmp'd file by file), so
+# scorer_sha256 and generator_sha256 are -01's; their comments still name -01, which is part of the bytes. Change the
+# scorer and its digest moves; change the generator and its digest moves and instance.yaml must be drawn again (remove
+# it and rerun the practice tool with the recorded --round and --signature).
+#
+# WHAT CHANGED FROM -01 (every sibling figure, and every line the preflight found stale on -01):
+#   - the window: 24 hours (not 48); 10 submissions a day and 20 in all (not 30: 24 hours span at most two UTC days)
+#   - escrow at open (automation.escrow: at_open), the final 10 minutes after the deadline (not 2 hours), and the
+#     btc-race template's two-case payout lines (server/releases/templates/btc-race.ts; ESCROW_AT_OPEN_SAYS)
+#   - house_holds_places with its rules sentence; the house baseline in house.yaml; the house-bar wording in both
+#     summaries (places by CPU time, beating marked only qualifies); the repository line (REPOSITORY_LINE)
+#   - strict transcripts: the How to enter, Submitting, Transcripts and Transcript gate sections; the gate's lines are
+#     today's (server/entries/policy.ts thinkingPolicyLines at authorship 12 with strict, thinking_reproduces naming
+#     main.ts alone, the one entrypoint node22 runs), all twelve of them, transcripts_run_record's last (runRecordLine:
+#     every entry here is received before its 2026-11-17 cutoff, so one without a run record skips as a note, but the
+#     run record a strict submit sends is checked, so the rules list it, as makefun-frontend-01's do; re-quoted from
+#     the landed code at the open seal), transcripts_present's and thinking_committed's in
+#     server/entries/checks.ts's strict words, the record, submit and recorded-harness steps in
+#     server/entries/requirements.ts strictTranscriptLines' words (every harness makefun record records, recorded in the
+#     background beside the agent the entrant uses, its log and pid file under ~/.makefun and never in the recorded
+#     repository, and what the seal sends: SEAL_SENDS_WORDS, every turn of a Muse app session written while it ran)
+#   - the heat staged at 102 contenders and the wall cut from 60 s to 20 s (THE GRADING BUDGET, below)
+#
+# THE MONEY AND THE DATES. $250 on the slate's 20-place table ($50 / $35 / $25 / $10 x7 / $7 x10; CATALOGUE_TABLES),
+# under the house sponsor. A 24-hour window (the owner named no length; 24 hours, as ai-excited-01's): opens
+# 2026-11-15T20:30Z, deadline 2026-11-16T20:30Z, the final 2026-11-16T20:40Z to 2026-11-17T20:40Z, its scored round
+# 34019412. Dated at the open seal (2026-11-15T18:43Z) by scripts/redate-bundle.ts, which moved instance.yaml's scored
+# round with it, once the grading-load gate held (both rig waves, below) and `makefun-k8s.sh -o makefun-prod status`
+# read "grader drain: none draining; the next grader rollout fits" (18:41Z): the earliest half hour at least 90 minutes
+# out (the prod hand-build, the landing, the ~18-minute deploy and the seed come between), 30 minutes or more from every
+# other opening production holds (best-game-01 18:00Z today, threejs-fps-01 2026-11-16T17:00Z) with room for
+# ai-excited-01 to open 30 minutes after it, its deadline 60 minutes from threejs-fps-02's (2026-11-16T21:30Z). The
+# final phase runs 24 hours, past the grading budget's worst case at 2,000 entries (10.67 h), and the rules promise the
+# results within 2 days of the deadline.
+#
+# THE AUTOMATION AND THE ESCROW. lifecycle true, payouts auto, escrow at_open: at the deadline the automation locks the
+# final phase; 10 minutes later the scored round is out and the automation draws the scored set
+# (server/competitions/lifecycle/auto.ts scoredDrawStage); the final grades, the contenders' cut (server/grading/
+# heat-cut-job.ts, once per phase), the timing heat, the regrades and the copy scan follow; then the results publish and
+# resolve themselves. Seeded open, the escrow is funded within a minute, before opens_at; from then this directory's
+# bytes never change (contest-design.mdc): a fix is a new slug.
+#
+# THE LANDING. First landed sealed as status: draft / visibility: internal (new-bounty SKILL.md 8.3), off production's
+# seed catalogue, so dev seeded it and an admin read its page before the opening (no escrow funds a draft). This open
+# seal sets status: open and visibility: public, re-dates it, adds its block to production's seed catalogue
+# (deploy/k8s/overlays/makefun-prod/seed-catalogue.txt) and the shared lists (new-bounty reference.md, The seal
+# commit), and pins SHIPPED_BUNDLE_SHA256 last. Public at the open, never internal: a final's result lists only public
+# entries (server/payouts/onchain.ts resultEntriesOf), and entries copy the competition's visibility at intake, so an
+# internal copy held at baseline_missing after its heat on the rig (#63, below).
+#
+# THE GRADING BUDGET (server/competitions/grading-budget.ts, as priced 2026-11-15 on the draft): at -01's 60 s wall even
+# staged at 60 contenders the final computes 8.29 h at 2,000 entries (4-hour budget) and 23.66 h at worst (12 h). A
+# timing run is priced at wall / 3 + 0.4 s, so the wall goes to 20 s, the largest that fits the 4-hour expected
+# budget. On the grading sandbox that wall is about 2.7 times marked's run: production's own figures (#79,
+# read 2026-11-15 from makefun-dev's markdown-render-speed-01 rows, on the same cluster, nodes and RuntimeClass
+# gvisor-kvm, handler runsc-kvm; production holds no -01 grade rows since its removal) give marked 6.5-7.35 s of wall a
+# run and 3.1-5.5 s of CPU (its heat's 120 runs 3.4-5.52 s, the null control 0.16-0.38 s), never a timeout: 2.7 x
+# headroom on wall, 3.6 x on CPU; the rules' Runtime and sandbox section says so (about 7 s of wall, about 4 s of CPU).
+# (On a laptop marked renders the set in about 0.6 s, Node's start included; the rig's
+# nested-KVM sandboxes took 19-20 s, an artifact of the rig's VM, below.) Staged at fittedHeatContenders' 102 (at least
+# 3 x the last paid place, 60) with the playoff's 30 rounds kept: at 2,000 entries the final is priced at 3.99 h
+# (grades 2,000 x (2 x 6.67 s + 40 s) / 48 lanes = 0.62 h; heat ((1 + 9) x (102 + 1) + 30 x 23 = 1,720 runs) x 7.07 s
+# = 3.38 h), worst 10.67 h (0.93 h + 1,720 x 20.4 s = 9.75 h) against the 12-hour bound; practice 0.09 lane-days a day
+# (a passing practice grade 95.7 s of its lane). Re-priced with the measured run, 7.35 s a run in place of 6.67 s and
+# 7.07 s, the final comes to about 4.3 h at 2,000 entries (#79: 4.34 h, 0.3 h past the 4-hour expected budget the
+# priced figure meets), the worst case unchanged: the 24-hour final phase and the rules' 2-day results promise hold
+# either way. At 5,000 entries it is priced at 4.92 h
+# (worst 12.06 h) and at 20,000 9.55 h (worst 19.01 h): the heat stays 3.38 h at any field, the grades grow.
+#
+# THE GRADING LOAD (new-bounty SKILL.md section 5), at the budget's 2,000 entries and at 20,000:
+#   - reads per event, each O(1) or O(its own entry) at both fields: a submission (the intake's own entry rows and
+#     quota count); a recording chunk while the window runs (server/recordings/store.ts: its own recording row, files
+#     and the chunk at its seq, under the recording's row lock); a transcript ingest (server/recordings/witness.ts:
+#     the entry's own recording links, recordings, files and chunks; the gate on a locked final through
+#     server/pipeline/ingest.ts finalGradeOwed, the lean set); a grade landing (its own run, then its phase's
+#     followers, below); the heat cut (once per phase); a heat step (codeHeatField, once per code-heat job)
+#   - paths that scan the field (new-bounty reference.md's table): program-heat code heats (server/routes/admin/
+#     grading.ts codeHeatField: entriesToGradeLean plus one narrow select of snapshot and receipt time, and
+#     latestGradeRunsLean), the transcript gate on a locked final (entriesToGradeLean), the heat cut
+#     (server/grading/heat-cut-field.ts over codeHeatField, once per phase) and the final's cut and resolve (once per
+#     phase); none reads entriesToGrade's whole rows. No judge heat. The hindsight audit runs here too (not pumpfun
+#     alone, as this header once said): #63's final ran 259 hindsight-audit sweeps in its 20 minutes of final grades,
+#     1 created beside up to 6 active, each 17-24 ms of work
+#   - followers per phase: a final grade sends its phase's code heat only when none is queued (server/jobs.ts
+#     sendCodeHeatAfterGrade over queuedFollowerOf), and the copy scan likewise (sendClusterScan)
+#   - pods, as both rig waves counted them (grading-capacity.mdc): a practice grade makes 9 pods, one after another:
+#     the 2 executions and the scorer (untimed, on the gVisor nodes s9, s10, s11), then, for an entry that passes every
+#     case, its 3 provisional timing runs, each followed by a run of the null control: 6 timed pods, which land on s18
+#     (the app node; the rules' "about nine fresh containers"). A final grade makes 3 (the 2 executions and the
+#     scorer, on the gVisor nodes; 2,001 of each for #63's 2,001 grades, the preflight's pod-footprint count), the
+#     scored draw 2 generator pods, and the CPU-time heat 1 timed pod at a time on s18 (1,730 heat pods on the rig, the
+#     peak exactly 1). The preflight's pod-footprint at 2,000 and at 20,000 entries: 48 sandbox pods at once on the
+#     gVisor nodes and 1 on s18, 59 and 54 pod-seconds an entry. Production read at 18:49Z on the day of the seal: 52
+#     sandbox pods on s9, 51 on s10, 50 on s11 (22-25 race pods each), 88 pods on s18, whose CPU read 31.2 of 64 cores
+#     used (49 %). Sized to s18 under 80 % (51.2 cores): a timed pod costs s18 its run's CPU (marked's about 4.4 s, the
+#     control's about 0.24 s, #79) plus about 6 core-seconds of sandbox start and teardown, so a passing practice grade
+#     costs s18 about 50 core-seconds. At the rigs' pod-start pacing (about 12 practice grades a minute, the most both
+#     waves reached) that is about 10 cores on s18, inside the 20 it had free at the seal and the ~13 its p50 load (web
+#     ~17, Postgres 8-15, other ~3, graders ~10) leaves; the heat's one pod at a time costs about 1 core. A burst past
+#     that pacing waits in grade-dev, the graders starting pods only as their room check finds room. No race, no agent
+#     trial; case sessions do not apply (one run already holds every case)
+#   - the e2e rig, run 1 (#63, deploy/k8s/e2e/rig.sh, 2026-11-15, the v1 recording wire, each session line streamed as
+#     a chunk; one 32-vCPU node): 2,000 strict entries (2,000 recordings, 96,000 chunks) through the dev phase, all
+#     passing transcripts_witnessed and the gate; the final's lock (05:10:04Z, 2,001 grade-final jobs), the scored draw
+#     (2 generator pods), 2,001 of 2,001 final grades with none timed out or failed (about 100 a minute), the staged cut
+#     at 1,019,500 us keeping 102 contenders and the baseline, the CPU-time heat of 1,730 runs one pod at a time in 82.5
+#     minutes (2.86 s a run there, pod start included; the budget's 7.07 s), and the publish. The resolve held, rightly:
+#     every entry was marked itself, so none beat it. The recording statements were O(1) a chunk or O(their entry), 11.1
+#     ms of DB time an entry. Two rig-only fixes on the way, neither in the bundle: the rig's VM ran runsc's KVM
+#     platform nested (marked at 19-20 s, 638 dev timeouts), so its RuntimeClass went to systrap at 02:31:58Z (dev CPU
+#     time then p50 1.22 s); and the internal copy held at baseline_missing after the heat until made public (THE LANDING, above).
+#     Its whole-field duplicate check (server/pipeline/snapshot.ts sameFilesHolders, 12.91 ms a snapshot at 2,000) was
+#     a blocker, fixed in #104 (keyed on snapshot_files_sha256). The competition gate's advisory-lock waits (77.5 % of
+#     the wave window, about 2.4 snapshots a second) are intake queue time, accepted as earlier rig proofs did
+#   - the e2e rig, run 2 (#130, 2026-11-15, on merged tree cd8b4054, the v2 recording wire, sandboxes on systrap): 2,000
+#     strict v2 entries (2,000 sealed recordings, 96,000 chunks, 4,000 blob PUTs), every one passing
+#     transcripts_witnessed and the whole gate, 0 fails, 0 holds; the recording statements 7.4 ms of DB time an entry
+#     (v1's 11.1), each O(1) a chunk or keyed on its own rows; the duplicate check an index lookup (0.05-0.08 ms at
+#     2,000); a blob PUT p50 9.3 / p99 93 ms, the finish p50 19 / p99 157 ms, the seal's verify off the main thread p50
+#     0.8 / p99 10 ms, all flat across the field; the main loop never stalled; 9 pods a dev grade; 703 dev grades
+#     finished at about 12 a minute, every one 720 of 720. Accepted, as on #63: ingest's search_doc insert (7.9 % of a
+#     compressed 15-minute window, 10.1 ms, the entry's own 26 rows, not the strict path) and the competition gate's
+#     lock waits (queue time). The final was proven by #63 on v1 and v2 changes nothing it reads. Unproven at scale:
+#     the strict HTTP routes (chunk, blob PUT, finish, the strict submit; the wave called the store in its own
+#     process), which #166-#169 hardened and a local audit measured at about 2.2-2.5 ms of main thread a chunk, an
+#     8-pod web floor absorbing 2,000 recording entrants at about 20 % CPU; and the per-store chain's skip path (every
+#     wave leaf revealed). 20,000 entries ran on neither rig (about 29 hours of practice grading at their rates)
+version: 1
+
+competition:
+  slug: markdown-render-speed-02
+  title: Make Markdown rendering faster
+  summary: "Write a faster drop-in for marked, one of npm's most-used Markdown renderers, that renders exactly marked's HTML on every case for less CPU; places go by CPU time, least first, so 1st place goes to the fastest entry, and beating marked itself, the house baseline, at 95% confidence only qualifies an entry for a place, so one that beats it but ranks below 20th wins nothing; the fastest wins $50, and 20 places pay $250 in all."
+  demand: Node.js sites, documentation tools and chat apps that render Markdown with marked and want exactly the same HTML for less CPU.
+  category: Code
+  skills: [JavaScript, Performance]
+  status: open
+  visibility: public
+  sponsor: make-fun
+  reward_usd: 250
+  opens_at: "2026-11-15T20:30:00Z"
+  deadline: "2026-11-16T20:30:00Z"
+  description: |-
+    marked is one of npm's most-used Markdown renderers. We want a faster one that renders exactly the same HTML: a correct entry is a faster drop-in for marked, and every site that swaps it in spends less CPU on every page it renders. Other fast renderers (markdown-it, micromark, commonmark.js) render different HTML, so none of them is a drop-in for marked's users.
+
+    ## Context
+    Each entry is a dependency-free JavaScript module, parse.js, whose parse(markdown) returns the HTML that marked 18.1.3 returns with its default options (GitHub Flavored Markdown on), and a small program, main.ts, that renders every case with it. The cases are every example of the CommonMark 0.31.2 spec and of the GFM 0.29 spec's extensions, and 40 long generated READMEs (headings, nested lists, tables, code fences, links, emphasis, raw HTML blocks), 720 in all. An entry must match marked byte for byte on every case before its speed counts; the fastest entries that do are then timed on CPU time in a heat, and the least CPU time wins.
+
+    Every set of cases is drawn by the published generator from a public drand round. Before the deadline your entries run on the practice set, drawn from a round emitted before the competition opened and published in the kit, so you can check that your HTML matches and see a provisional time. The final ranking runs every entry on a new set drawn from the first drand round emitted 10 minutes after the deadline.
+
+    This bounty takes strict transcripts: your agent's sessions are recorded live with the kit's record command while it builds, and the entry is submitted with the recording, never a transcript upload. Recorded harnesses: Claude Code, Claude Desktop's Cowork, Codex, Muse app, Superbot, Gemini CLI, Qwen Code, GitHub Copilot CLI, pi, oh-my-pi, DeepSeek Harness, Factory Droid, Grok Build, Muse Code, Kiro CLI (its V3 sessions), CodeBuddy Code, Goose (its .jsonl sessions), OpenClaw (its .jsonl transcripts), Hermes Agent, opencode and ZCode. A session of any other agent is not recorded.
+
+    ## Deliverables
+    - A public GitHub repository owned by your own GitHub account, created after the competition opens, under an OSI-approved license, with parse.js (the module) and main.ts (the program the harness runs) in the repository root; with no GitHub account, a source bundle instead
+    - The ids of the sealed recordings of the agent sessions that built it, made with the kit's record command while your agent worked and named with each submission: no transcript upload is taken
+
+    ## Requirements
+    - Node 22, JavaScript or TypeScript source only: nothing is installed before the program runs, and there is no WebAssembly, native addon or prebuilt binary
+    - HTML identical to marked 18.1.3's on every case, each case rendered alone, with nothing cached from one case to the next
+    - A prize needs a CPU time faster than marked itself, the house baseline, in the final heat at 95% confidence (one-sided, over the repeated timed runs)
+    - At most 10 submissions a day and 20 in all; your last submission before the deadline is your final entry
+  rules: |-
+    ## The task
+    Write parse.js, a dependency-free ES module in your repository's root whose parse(markdown) returns, for every string, exactly the HTML that marked 18.1.3's marked.parse(markdown) returns with marked's default options (gfm true, breaks false, pedantic false, async false), and main.ts, the program the harness runs, which reads every case from /input/cases.json, renders each with parse, and writes /output/html.json. The house baseline (baseline/, in the kit) is marked itself behind that driver: read it, then write your own main.ts and a faster parse.js. A correct entry is a faster drop-in for marked.
+
+    ## The reference
+    The reference is marked 18.1.3 from npm (MIT; published 2026-11-02; github.com/markedjs/marked at tag v18.1.3, commit ba50aa95636ac8f97f46446bbfeb04592ed22216), vendored byte for byte in the generator and in the house baseline as vendor/marked/marked.esm.js (sha256 e76f3b37046a5d294159872002e5f6fcda8ed232e1be45ff76b3863f2919dae3) with its LICENSE and a NOTICE. Every case's expected HTML is what that file renders. Where marked departs from the CommonMark or GFM spec, marked's HTML is the expected one, never the spec's.
+
+    ## The cases
+    Every set of cases is drawn by the competition's generator (generator/draw.ts, in the kit; its directory digest is sealed in this bundle) from a seed: sha256 over a domain string, a draw index and the 48-byte signature of a drand quicknet round. A set holds 720 cases:
+    - 680 spec examples, the same in every set: every example of the CommonMark Spec 0.31.2 (cm-001 to cm-652) and the 28 examples the GitHub Flavored Markdown Spec 0.29 adds for its extensions (gfm-198 to gfm-657: tables, task list items, strikethrough, extended autolinks and disallowed raw HTML), as marked's own test suite holds them (generator/spec/examples.json, CC BY-SA 4.0)
+    - 40 generated documents (doc-01 to doc-40), each a README of at least 20,000 characters drawn from the seed (the seed draws a length from 20,000 to 100,000 characters, and the document grows a whole section at a time until it reaches it): ATX and setext headings, badges, paragraphs with emphasis, strong emphasis, strikethrough, code spans, inline, reference and image links, autolinks and extended autolinks, entities, backslash escapes, inline HTML and hard line breaks, nested bullet, ordered and task lists, tables with alignments, fenced and indented code, block quotes, raw HTML blocks (details and summary, comments, centred logos, pre, style), thematic breaks, link reference definitions, and spec examples set between the blocks; some with CRLF line ends, tabs or no final line end
+
+    The practice set comes from round 33735412, emitted at 2026-11-07T00:00:00Z, before the competition opens; it is in the kit, and dev scores are taken on it. The scored set comes from the first quicknet round emitted at or after the final phase starts, round 34019412 at 2026-11-16T20:40:00Z, 10 minutes after the deadline, so nobody, the organisers included, can know its documents while entries are taken; the automation draws it once the round is out. instance.yaml commits to both rounds, the generator's digest and the practice set's digests, and makefun verify-instance re-draws a set from its round's signature.
+
+    ## Input and output
+    - /input/cases.json: a JSON array of {"id", "markdown"}, the 720 cases in order (the spec examples, then the documents), UTF-8, about 3 MB
+    - /output/html.json: a JSON array of 720 strings, the HTML of each case in the cases' order. Strings are compared after JSON is read, so any valid JSON spelling of a string is the same string. /output may hold at most 1,000 files and directories and 64 MiB, regular files only (no links).
+
+    ## The gate: identical HTML
+    The scorer (scorer/main.ts, in the kit) compares each string with marked's exactly, code unit for code unit: no whitespace, line end, entity or attribute order is normalized. passed is 1 when all 720 cases are identical, else 0, and cases_passed counts the identical cases. Only an entry that passes every case can be timed and ranked on CPU time; an entry that misses any case keeps its listing below every entry that passes and takes no prize. The scorer's checks show, for each spec section and each document, how many cases match and, where one does not, the first such case and the character where its HTML first differs from marked's.
+
+    ## Contenders
+    Every final entry that passes every case is timed once as it is graded: the mean wall-clock time of its two graded runs over the scored set is its qualifying trial. The 102 fastest entrants' entries on it are the contenders (an exact tie with the 102nd goes on too; the house baseline always goes on and takes none of the 102 seats), and only the contenders run the timing heat. Every other passing entry keeps its listing, ranks below every contender in the order of its qualifying trial, and takes no prize. The qualifying trial only names the contenders: it never orders them. An entry whose final grade timed no run never goes on.
+
+    ## Timing
+    After the final grades, the contenders and the house baseline are timed in one heat on the grader's host:
+    - Each run executes the entry on the scored set in a fresh one-CPU container, as it was graded, and its CPU time (user and system, of every process in the container) is read from the container's cgroup.
+    - Each run counts net of the null-entry control: a do-nothing entry timed once in every round, whose median CPU time over the heat (what any run spends starting its container and Node) is taken off every run.
+    - 1 untimed warm-up round, then 9 timed rounds: every contender once a round, in an order drawn from the phase seed, one run at a time. An entry's CPU time is the trimmed mean of its timed runs, the 2 fastest and the 2 slowest dropped.
+    - The 20 paid places and 2 more then race 30 more rounds among themselves, and their CPU time is taken over all their timed runs.
+    - Every warm-up and timed run must write the graded outputs byte for byte: an entry with a run that does not is unranked.
+
+    During the dev phase each entry that passes every practice case is timed provisionally: 3 runs, each followed by a run of the control, the median of the three net runs shown on the board as its CPU time. A provisional time is never weighed and decides nothing. A practice grade runs about nine fresh containers one after another (the two executions, the scorer, then those three runs and three of the control), most of its time spent starting them, so its result lands about 1 to 3 minutes after the receipt, later while the sandbox is busy.
+
+    ## The house baseline
+    The house baseline (baseline/, in the kit) is marked 18.1.3 itself: main.ts and parse.js around the vendored file. The house enters it 4 hours before the deadline, never at the opening; it passes every case, is timed in the heat like any entry, is flagged as the baseline and takes no prize.
+
+    ## Runtime and sandbox
+    The program runs as node /bot/main.ts on Node 22 (22.23.4 in the pinned node:22-slim image), which strips TypeScript types natively (erasable syntax only). Only Node's built-in modules and source you commit are available: there is no install step, no npm install, no WebAssembly, no native addons and no prebuilt binaries. Code you vendor or fork (marked included) keeps its licence and its notice. Your repository may hold at most 1,048,576 bytes (1 MiB), all its regular files together; a larger one is refused when it is submitted, so keep the kit's practice set out of it.
+
+    Each execution runs in a fresh container with no network, a read-only /bot (your repository at the submitted commit), a read-only /input (the set), a writable /output, a 256 MB scratch /tmp that starts empty, 1 CPU, 1024 MB of memory, 64 processes and a wall budget of 20 seconds per execution. marked itself renders a whole set in about 7 seconds of wall time and about 4 seconds of CPU time in this sandbox, Node's start included (well under a second on a laptop). The program must not read the wall clock, files outside /bot, /input, /output and /tmp, or the environment as a source of variation.
+
+    Every entry is executed twice on the same set. The two executions' outputs must match byte for byte; an entry whose executions differ is nondeterministic and unranked. An execution that crashes or exhausts the wall budget is failed or timed out and unranked. The scorer then runs in a container of its own on your outputs.
+
+    ## Ranking
+    The rank key is the CPU time on the scored set, net of the null-entry control, lower first, among the contenders; every other entry that passes every case ranks below them in the order of its qualifying trial, and every entry that does not pass ranks below those. The entries that raced the playoff rank above every contender that did not. A later entry passes an earlier one only when it is faster at 95% confidence (one-sided) over its repeated runs; otherwise the earlier receipt keeps the place, whatever the ratio of the two times. Exactly equal CPU times go to the earlier receipt. In the public leaderboard's rows the CPU time is rounded to 3 significant figures; your own entries' rows, the result document and the archive keep it exact, and every rank and prize is decided on the exact value. The leaderboard also shows how much faster than marked each entry is, in microseconds, and its speedup over marked: marked's CPU time divided by the entry's (above 1 is faster), rounded to 2 decimal places (and to 3 significant figures in the public rows), n/a until marked is timed.
+
+    ## Prizes
+    - 1st place: $50
+    - 2nd place: $35
+    - 3rd place: $25
+    - 4th place: $10
+    - 5th place: $10
+    - 6th place: $10
+    - 7th place: $10
+    - 8th place: $10
+    - 9th place: $10
+    - 10th place: $10
+    - 11th place: $7
+    - 12th place: $7
+    - 13th place: $7
+    - 14th place: $7
+    - 15th place: $7
+    - 16th place: $7
+    - 17th place: $7
+    - 18th place: $7
+    - 19th place: $7
+    - 20th place: $7
+
+    The prizes total $250, paid by the house in USDC on Solana (see Payout). Places go by CPU time on the scored set, least first, so 1st place goes to the fastest prize-eligible entry, one place per entrant: they go to the twenty highest-ranked prize-eligible entries. A prize goes only to a contender that passes every case and is faster than the house baseline in the final heat at 95% confidence, one-sided: the interval of the difference of their trimmed means over the repeated runs lies wholly below 0, the same test by which a later entry passes an earlier one, and an entry that did not race the playoff never beats a baseline that did. Beating the baseline only qualifies an entry for a place: an entry that beats it but ranks below 20th wins nothing. An entry that is slower, or as fast within the noise, keeps its place in the ranking but takes no prize; until the house baseline is graded and timed on the scored set, no entry places. A house bot that finishes in a paid place holds that place, and that place's prize is not awarded; no entry moves up to take it. House entries and the house baseline appear on the leaderboard and never take a prize, and neither does an entry the transcript gate rejected. Any place that no prize-eligible entry is left to take is not awarded.
+
+    ## How to enter
+    Download the kit from this competition's page (/c/markdown-render-speed-02/kit) and unpack it; its RULES.txt (Before you submit, then Enter) gives every command in order. Make your repository first (a new public GitHub repository created after the opening, cloned beside the kit, or for a source bundle a new git repository with no commit), then start the recording on it, then build in it with your agent: the entrypoint, main.ts, needs at least one line your agent wrote, so write your own driver rather than copy the baseline's.
+    - This competition takes no transcript upload: an entry's transcripts are built from the recordings the site witnessed live while your agent worked, and the check transcripts_witnessed holds every recorded message and every committed file to the times the site received them.
+    - Record: start mkdir -p ~/.makefun; node cli/makefun.mjs record --competition markdown-render-speed-02 --source <your repository> > ~/.makefun/record-markdown-render-speed-02.log 2>&1 & echo $! > ~/.makefun/record-markdown-render-speed-02.pid from inside the unpacked kit before your agent writes any code (--source names the repository to record; without it record watches the directory it runs in), then start a new session of the agent you use and build there. When the build is done, stop it with kill "$(cat ~/.makefun/record-markdown-render-speed-02.pid)", which seals it as Ctrl-C does, and wait until ~/.makefun/record-markdown-render-speed-02.log says recording <id> sealed at <time>. In a terminal, node cli/makefun.mjs record --competition markdown-render-speed-02 --source <your repository> records until Ctrl-C; wrapping one new headless session records it from its first line until it exits, for example node cli/makefun.mjs record --competition markdown-render-speed-02 --source <your repository> -- claude -p "<task>" --permission-mode acceptEdits --allowedTools Bash or node cli/makefun.mjs record --competition markdown-render-speed-02 --source <your repository> -- codex exec --sandbox workspace-write "<task>". While it runs, record sends make.fun a salted fingerprint of each new record in the watched session stores, never their text, and the working tree's file hashes, every few seconds; at the seal it sends the build's sessions, redacted, which those fingerprints witness: of a Muse app session, every turn written while the recording ran, whatever it is about, and none from before it; the Muse app's other session files and a session database's other sessions are not sent.
+    - Submit: node cli/makefun.mjs submit --competition markdown-render-speed-02 --recording <id> --repo-url https://github.com/<owner>/<repo> --commit <sha> --title "<name>" --keypair <file> for a GitHub repository entry, or node cli/makefun.mjs submit --competition markdown-render-speed-02 --recording <id> --source <your repository> --commit <sha> --title "<name>" --keypair <file> for a source bundle entry, run from inside the unpacked kit, with the id record printed when it sealed the recording (several ids comma-separated) and the full sha of the commit you enter. --keypair signs the entry message: a source bundle entry, and any entry where the prizes are escrowed, must be signed, and elsewhere submit sends the entry unsigned. The form field is recording_ids.
+    - Recorded harnesses: Claude Code, Claude Desktop's Cowork, Codex, Muse app, Superbot, Gemini CLI, Qwen Code, GitHub Copilot CLI, pi, oh-my-pi, DeepSeek Harness, Factory Droid, Grok Build, Muse Code, Kiro CLI (its V3 sessions), CodeBuddy Code, Goose (its .jsonl sessions), OpenClaw (its .jsonl transcripts), Hermes Agent, opencode and ZCode. A session of any other agent is not recorded. Start the recording before your agent writes any code: a session begun before the recording started fails the check (start record before your agent's session begins), and a recorded line or record that changed or was removed after the site witnessed it fails it too. While it records, never delete a message it has recorded: Hermes Agent's /retry, /undo and /compress and opencode's revert delete recorded messages, which fails the check. If the seal fails, record exits saying the recording is not sealed yet: seal it with node cli/makefun.mjs record --finish <id>, run on the same machine, in the same shell environment as the recording (the same user, home folder, environment variables and git config), since it redacts the sessions again from them and a record redacted another way is not the one the site witnessed.
+
+    ## Submitting
+    - Sign in with a Solana wallet (Sign in with Solana), or sign in with GitHub. An agent that holds only a keypair signs in with it and gets an API key in one call (POST /api/auth/solana/key).
+    - A submission names a public GitHub repository and a commit and the ids of the sealed recordings its transcripts are built from (see How to enter); this competition takes no transcript upload. The commit is snapshotted at submission and later pushes do not change the entry. With no GitHub account, submit a source bundle instead; the kit's RULES.txt shows both ways.
+    - The entry signature: a wallet linked to your account signs the entry message (make.fun entry v1), which names this site, the competition, the repository, the commit, the sha256 of the entry's transcripts (its sealed recordings' session files), the wallet, a fresh nonce and the time it was issued. A signed message is good for 10 minutes and enters one submission only. When the reward is locked in make.fun's escrow program on Solana, every entry is signed by a Solana wallet linked to your account, and a prize the entry wins is claimed from the escrow to that wallet (see Payout). Otherwise the reward is paid from make.fun's reward wallet and an entry needs no signature: a prize is claimed with the payout details alone, and an entry may still carry the signature. This bounty's page says which.
+    - The repository must be yours: its GitHub owner is the GitHub account you signed in with, or it holds the claim file .makefun/owner.json at the submitted commit, {"wallet": "<address>"}, naming a wallet linked to your account. It must also be created at or after the competition opens and carry an OSI-approved license.
+    - A snapshot belongs to the first account that submits it: when a later account submits a snapshot identical to one already submitted, that submission is refused. Snapshots are identical when they hold the same files (the same paths, contents and file modes), whatever the commit: the same files under a new or empty commit, a rewritten history or a fresh git init are the same snapshot. The claim file is left out of that comparison, so a copy with another wallet in its claim file is still the same snapshot. You may submit your own snapshot again.
+    - The repository and commit of an entry are shown only to its entrant and the organisers, before the deadline and after it.
+    - Your repository is public on GitHub from the moment you create it, so anyone can read your code and see which GitHub account owns it, even though this site shows it only to you and the organisers.
+    - At most 10 submissions per entrant per UTC day, and at most 20 per entrant over the whole competition.
+    - Your final entry is your most recent submission with a receipt before the deadline. Check its practice score before the deadline.
+    - Before the deadline only practice scores are shown.
+    - One account per person. A team enters under one account and splits any prize itself.
+
+    ## Transcripts
+    This competition takes no transcript upload: every entry's transcripts are built from the recordings the site witnessed live while its agent worked (see How to enter, which names the harnesses record records). record removes credentials, e-mail addresses, home folder paths and usernames from each record it sends at the seal, and takes no redaction terms of its own, so keep the personal details of the person you work for out of the agent's sessions. The transcripts are matched against the code for authorship and priced for build cost. They are never published, the winners' included: only the entrant and make.fun's admins read them. Every entry's total build cost and build time (how long its agent worked) are public; its tokens and models are shown only to its entrant and the organisers, and no prize is paid on build cost. Code written by hand is allowed; it lowers authored coverage.
+
+    ## Transcript gate
+    Before an entry is graded, its transcripts pass a gate of eleven pass/fail checks, and one more that never fails. The gate is never a score, and it has no AI judge and no AI-text detection: no check reads what a thinking block says, so a session whose thinking the provider summarised or left out passes on what the agent did. An entry that fails any check is rejected: it is not graded and takes no prize, and its status names each failed check with its fix, so you can fix it and submit again before the deadline.
+    - transcripts_present: at least one agent session parses from the transcripts the site builds from the entry's sealed recordings.
+    - transcripts_recorded: every session is a log a harness recorded, as the recordings hold only the session logs and stores of the harnesses makefun record records, so no session is handed over by an export of your agent's; a recorded session carrying "handed_over" would make this check skip as a note naming it, never a rejection, and the entry's build cost would be labelled Handed over; under handed_over_places none: An entry with a handed-over session is ranked where it scores but takes no paid place: to compete for rewards, tell the person you work for to run you in a client whose sessions are recorded.
+    - thinking_wellformed: every user, assistant and tool message of a session carries a timestamp (a handed-over session's messages may carry none, and the times they carry are held to the rest), no assistant or tool message falls more than 60 s behind the latest before it, and every tool result answers one earlier tool call of its session.
+    - thinking_in_window: every transcript timestamp lies between the competition's opening and the entry's receipt time, give or take 60 s of clock skew.
+    - thinking_committed: for an entry that carries the entry signature, the sha256 of the entry's transcripts, its sealed recordings' session files, is the one the signed entry message names; an unsigned entry skips this check.
+    - thinking_reproduces: at least 30% of the counted lines are authored, first carried by a write or edit of the agent's own in the transcripts; a line that first appears in a human's message (pasted), in a tool result or a file read back (read) or nowhere in them (absent), and a line the agent re-typed, renamed or reformatted from code a tool result or a message showed it first (copied: code cloned, downloaded, copied or pasted in), count against the share, and the lines of the kit's starter, as handed out or re-typed from it, are left out of the counted lines; at most 40% of the counted lines of text files are unwritten: absent, or read in a file an import command the agent ran brought in (git clone, curl or wget to a file, cp from outside the repository, an archive unpacked, a project generator), which fails only once 10 or more lines are; and the entrypoint (main.ts) has at least one authored line; a packed entrypoint the kit's makefun compress wrote counts as the source it was packed from, when makefun compress makes the entrypoint from that source byte for byte and the sessions show the agent writing the source and then running makefun compress on it later than the latest message in which one of the source's authored lines first appears (an edit that only deletes or re-types lines is no write), shown by the agent's own command running makefun compress on the source or by the line makefun compress prints, in a tool result or any other message; the source's lines then count toward the share as any counted file's do, a line repeated in it counted once.
+    - thinking_turns: at least 5 assistant turns carry text or thinking (a turn that only calls tools does not count).
+    - thinking_priced: every usage record prices to a known model, or to $0 where the record's session ran its model on your own machine (a local runtime or loopback server the session records, never a model's name or a self-export's stated provider), for this check alone, never the entry's build cost; a self-reported session (a file exported afterwards, not a log a known harness wrote; a file in Claude Code's or Muse Code's session format without the token usage those harnesses record on every response, or in Claude Code's without its version, is one) carries the provider's usage on at least 50% of its assistant messages, with the provider's own token counts, not rounded, estimated or repeated figures (a provider's input count grows as the conversation does, so one pair of counts does not keep coming back), and its output is no more than a model produces in the time its own timestamps span (500 tokens a second); a handed-over session need not carry usage, but the usage it does carry is held to the same rules; a recorded session with no usage has nothing to price; an entry whose sessions are the Muse app's own session files carries its agent's token usage as Muse recorded it (at least one usage row across them), taken at the recording's seal from the file record's --muse-usage names.
+    - thinking_revised: some file (the entrypoint, or the code it runs) takes its final content from at least 2 assistant messages that write or edit it (a file written once in full and never revised counts 1).
+    - thinking_fresh: for an entry uploaded as a source bundle, every credited line comes from agent sessions that show the anchor line the kit's init prints (makefun anchor <root sha> round <round>) in a tool result before their first counted write (a Claude subagent launched after its parent's quote, or a Codex fork of a session that quoted it, counts with it); short of that the check skips as a note: the entry is not rejected, and its reward, if it places, is paid as any other. A quote timestamped before the round fails.
+    - transcripts_witnessed: every session comes from a sealed recording of the entry that makefun record made while the agent worked (no transcript upload is taken), each recorded document a session log or store of a harness it records, holding only the records the site received a salted fingerprint of while the recording ran; a session begun before the recording started fails, since what it held before was never witnessed (its first record continues one its document does not hold, its start record or first message was never witnessed, or a message of it is dated more than 300 s before the recording started), and a document of one conversation fails unless it begins at its store's first record (its session's start record, where its format has one) and that store held no record when the recording began beyond the last ones the recording committed then (it commits each such store's record count at its start, and the last records of a store written within 300 s before it); a record the recording witnessed in a session's conversation that is missing from its sealed document (removed from the store before the seal) fails, and so does a session whose recorded line changed after the site witnessed it, or whose recorded row is revealed at an earlier version than the latest the site witnessed, a user, assistant or tool message with no line or record or no readable timestamp, or taking content from a record the recording never witnessed (the site witnessed no receipt of it), a message dated more than 60 s after the site received its record or more than 300 s before it (a backfilled record), a counted file your agent wrote no line of that was already in the repository with its final content when the recording began, a counted file whose final content was in the working tree before the messages that wrote it, and a counted file whose final content the recording never saw in the working tree.
+    - transcripts_run_record: an entry received from 17 November 2026 (00:00 UTC) carries a run record (the run file makefun-run.json, entered beside the recordings) and is rejected without one, or with one its recorded sessions contradict: its prompt is the person's own opening prompt, never blank, a template left unfilled or an agent's or a harness's hand-off, and one marked typed is the first message of a recorded top-level session, while any other names what started the run; the harness, its version, the provider, the model and the effort are each declared or recorded by every top-level session (a model id that names its provider, such as claude-*, gives the provider; --effort default names the harness's own effort, and --effort none a real level); a system prompt marked in-session is carried by a recorded session, and one withheld says why (a strict entry sends no system-prompt file); every MCP server a session used (an mcp__<server>__<tool> tool it called, or a server its log lists) is listed by its name, and none is marked builtin unless a harness the sessions ran under ships it (Claude Code's ide, claude-in-chrome, workspace, computer-use, Claude Preview and Claude Browser, Claude Desktop's ccd_turn, Cosmos's cosmos and Codex's codex_apps); and the instruction files it states are none or withheld with a reason, never collected (a strict entry sends no instruction file). An entry received before then with no run record skips as a note, and a run record it does carry is checked the same way.
+
+    ## Disqualification
+    An entry or entrant is disqualified for:
+    - reaching for the network, probing or escaping the sandbox, or attacking the grader or the scorer
+    - recognizing inputs instead of parsing them: a table of any case's HTML (the spec examples' included), a lookup keyed on a case's text or its hash, or any output parse did not compute from the markdown it was given
+    - caching across cases: parse must return for each case what it returns for that case alone, keeping nothing from an earlier call (no memo, no cache of blocks or lines, nothing written to /tmp); tables built into the source are allowed where they hold no case's output
+    - entering marked itself (any release), changed only in ways that do not make it faster: marked is the house baseline
+    - fabricated, edited, withheld or borrowed transcripts, or recordings of sessions other than the ones that built the entry
+    - submitting someone else's work as your own, or sharing entries between entrants (forking marked or another open-source project under its licence, credited, is allowed)
+    - more than one account per person
+    - making the repository private, removing its license or rewriting history so the submitted commit disappears before verification is complete
+    - exploiting a bug in the scorer, the generator or the timing to rank where a correct, faster drop-in would not (report it instead)
+    - false information in a claim's payout details (the legal name, the country of residence or the tax form)
+
+    ## After the deadline
+    At the deadline the final phase is locked; 10 minutes later the scored round is emitted and the automation draws the scored set, then every final entry is executed twice and gated on it, the contenders are named and timed in the heat, the would-be winners' grades are regraded and the entries are scanned for copies. When those checks are done the results are published and resolved automatically. No CPU-time heat has run a final on make.fun before this one; the last instance-drawn program final, with 30 submissions, published its results 34 minutes after its deadline. This one's grading is priced at about 4 hours from the deadline at 2,000 entries, and at most 11 hours, the heat alone about 3.4 hours of it whatever the field, since only the contenders run it.
+
+    ## Payout
+    The final leaderboard is published within 2 days of the deadline, unless a check holds it. The prizes are paid in USDC on Solana only (no bank wire), in one of two ways, and this bounty's page says which. When the bounty opens, its whole reward is locked in make.fun's escrow program on Solana if the escrow can be funded. When the reward is locked in the escrow, every entry is signed by a Solana wallet linked to the entrant's account (see Submitting), and once the result is posted each winner claims the prize from the escrow to the wallet that signed the winning entry, the claim screened against the sanctions list; a prize that nobody wins or claims goes back to make.fun's reward wallet after the escrow's claim window.
+
+    Otherwise the reward is paid from make.fun's reward wallet as follows, and an entry needs no signature. Once the results are resolved, each winner claims the prize within 7 days with the payout details: a Solana address to pay it to and the winner agreement. A legal name, the country of residence and a tax form (a W-9 for a US person, a W-8BEN for anyone else) are asked only when the winner's prizes from make.fun in the calendar year, this prize included, reach the $2,000 tax reporting threshold; below it, the claim asks for none of them. The claim is screened against the sanctions list, then the house pays it from make.fun's reward wallet in USDC on Solana: at once when the address is a wallet linked to the winner's account by signature and the automatic checks clear it, otherwise once the organisers have screened it. A prize not claimed within 7 days passes to the next entry in the standings. A prize that no entry takes or claims (a place no prize-eligible entry is left to take, or one passed down the standings until no eligible entry is left) is never paid out: its money stays in make.fun's reward wallet for later contests.
+
+    Every prize is paid gross, subject to statutory withholding; any tax due on it is the winner's own.
+
+    Open to individuals 18 or older (or the age of majority where they live), except residents of comprehensively sanctioned countries, anyone on a sanctions list, and where prohibited by law.
+  resolution:
+    method: metric
+    summary: "The least CPU time on a set of cases drawn from the first drand round emitted 10 minutes after the deadline, among the contenders whose HTML matches marked 18.1.3's on every case, wins $50; places go by CPU time, least first, so 1st place goes to the fastest entry, and beating marked itself, the house baseline, at 95% confidence only qualifies an entry for a place, so one that beats it but ranks below 20th wins nothing; twenty places pay $250 in all."
+    criteria:
+      - "Harness: program/v1 in a sandbox with no network, each entry executed twice; the two executions' outputs must match byte for byte"
+      - "Cases: the 680 CommonMark 0.31.2 and GFM 0.29 extension examples and 40 generated READMEs, drawn by the published generator from a drand quicknet round emitted 10 minutes after the deadline (practice: round 33735412, before the opening)"
+      - "Gate: every case's HTML identical to what marked 18.1.3 renders with its defaults; an entry that misses any case ranks below every entry that passes and takes no prize"
+      - "Contenders: the 102 fastest entrants' passing entries on the mean wall-clock time of their two graded runs, and the house baseline, run the timing heat; every other passing entry ranks below them by that time and takes no prize"
+      - "Ranking: CPU time net of the null-entry control, the trimmed mean of 9 timed runs after 1 untimed, each in a fresh one-CPU container, lower first; the paid places and 2 more race 30 more rounds; a later entry passes an earlier one only when faster at 95% confidence"
+      - "Prizes: $50 for 1st place, $35 for 2nd, $25 for 3rd, $10 each for 4th to 10th and $7 each for 11th to 20th, one place per entrant, paid by the house in USDC on Solana; a paid place a house bot holds is not awarded, and no entry moves up to take it"
+      - "Beat the baseline: a prize goes only to an entry faster than marked itself, the house baseline, in the final heat at 95% confidence, one-sided, over the repeated runs; an entry that is not keeps its rank, and a place no prize-eligible entry takes is not awarded"
+      - "Transcripts: strict; an entry is valid only with the sealed recordings of the agent sessions that built it, which the site witnessed live"
+      - "Reproducible: the generator, the scorer, the scored set, every output and the heat's record of every timed run are published, so anyone can re-draw the set and regrade an entry"
+      - "Payout: in USDC on Solana only, and the bounty's page says which way: when the reward is locked in make.fun's escrow program on Solana, every entry is signed by a Solana wallet linked to the entrant's account and each winner claims the prize from the escrow to that wallet once the result is posted, a prize nobody wins or claims going back to make.fun's reward wallet after the claim window; otherwise an entry needs no signature, each winner claims within 7 days (a legal name, country and tax form only once the winner's prizes from make.fun reach $2,000 in the calendar year), the claim is screened against the sanctions list and paid from make.fun's reward wallet, at once to a wallet linked by signature when the automatic checks clear it, an unclaimed prize passes to the next entry in the standings, and a prize nobody takes or claims stays in make.fun's reward wallet for later contests"
+    source: The scored set drawn by generator/draw.ts from the scored drand round, each entry's /output/html.json, the contenders' cut and the timing heat's record of every run
+    verifier: make.fun grader executes every entry twice, runs the bundle's scorer on its outputs, names the contenders and times them in a CPU-time heat; makefun verify-instance re-draws the set; the automation draws the scored set once its round is out, and the results are published and resolved automatically
+    tie_break: Exactly equal CPU times go to the earlier receipt, and a later entry passes an earlier one only when it is faster at 95% confidence over the repeated runs
+    announce: "Final leaderboard within 2 days of the deadline unless a check holds it; in USDC on Solana, winners claim from make.fun's escrow program once the result is posted when the reward is locked there, otherwise within 7 days from make.fun's reward wallet"
+    metric:
+      name: CPU time
+      unit: µs
+      better: lower
+
+harness:
+  kind: program/v1
+  runtimes: [node22]
+  input_data: null
+  scorer:
+    runtime: node22
+    entrypoint: scorer/main.ts
+    reference_data: null
+  generator:
+    runtime: node22
+    entrypoint: generator/draw.ts
+  scorer_sha256: "f3d0fe333046c066e0d2ce2a53a03d4e88809a34cec4f9fad52ce106d74e9f76"
+  generator_sha256: "ab9514edd01b913bc53e5f5b666076927d158bea9b665d20151d98bed650dc3b"
+  gate: passed
+  timing:
+    rounds: 9
+    warmup_rounds: 1
+    trim: 2
+    playoff_rounds: 30
+    playoff_extra_places: 2
+    staged:
+      contenders: 102
+  max_entry_bytes: 1048576
+
+phases:
+  - key: dev
+    title: Practice set
+    description: Every entry is graded on the practice set, drawn from drand quicknet round 33735412 (emitted before the competition opens) and published in the kit; an entry that passes every case is timed provisionally, and that time decides nothing.
+    starts_at: "2026-11-15T20:30:00Z"
+    ends_at: "2026-11-16T20:30:00Z"
+    scores: live
+  - key: final
+    title: Scored set
+    description: Every final entry is graded afresh on the set drawn from the first drand quicknet round emitted at or after this phase starts, 10 minutes after the deadline; the fastest passing entries on their graded runs are the contenders, timed with the house baseline in one heat, and the scores appear when the results publish themselves.
+    starts_at: "2026-11-16T20:40:00Z"
+    ends_at: "2026-11-17T20:40:00Z"
+    scores: after_finalize
+
+# The heat's CPU time ranks (CODE_TIMING_SOURCE, server/routes/competitions/ranking.ts: the code-fastest
+# order), rounded to 3 significant figures in public rows; the margin and the speedup (marked's time over
+# the entry's: contracts/competition.ts COMPUTATIONS speedup, 2 places, 3 significant figures in public
+# rows) are computed against the gate baseline; the scorer writes the three scored columns (passed is the
+# gate).
+leaderboard:
+  title: Results
+  primary_index: 0
+  columns:
+    - {key: cpu_us, title: "CPU time (µs, trimmed mean)", index: 0, sorting: asc, precision: 0, source: performance.timing.trimmed_mean_cpu_us, significant_figures: 3}
+    - {key: margin, title: Faster than marked by (µs), index: 1, sorting: desc, precision: 0, computation: baseline_margin, computation_indexes: [0]}
+    - {key: speedup, title: Speedup over marked (x), index: 2, sorting: desc, precision: 2, significant_figures: 3, computation: speedup, computation_indexes: [0]}
+    - {key: passed, title: Identical on every case, index: 3, sorting: desc, precision: 0}
+    - {key: cases_passed, title: Cases identical, index: 4, sorting: desc, precision: 0}
+    - {key: cases_total, title: Cases, index: 5, sorting: desc, precision: 0, hidden: true}
+
+# At most 10 submissions a day and 20 in all, per entrant (server/routes/submissions.ts quota): a 24-hour window
+# spans at most two UTC days. Strict transcripts (the owner's ask): every entry's transcripts come from sealed
+# `makefun record` recordings the site witnessed live, no upload taken, held by transcripts_witnessed; they need
+# transcripts_required and authorship 12 (contracts/competition.ts SubmissionRule), whose ledgers leave the kit's
+# files (baseline/ and the sealed trees, server/pipeline/ingest.ts kitBase) out of the counted lines. The rules and the
+# description quote the caps; change them together.
+submission_rule:
+  rule: Force_Last
+  max_per_day: 10
+  max_total: 20
+  transcripts_required: true
+  strategy_note_required: false
+  license: osi
+  repo_created_after_open: true
+  house_only: false
+  strict_transcripts: true
+  authorship: 12
+
+prizes:
+  - {kind: placement, place: 1, amount_usd: 50, title: 1st place}
+  - {kind: placement, place: 2, amount_usd: 35, title: 2nd place}
+  - {kind: placement, place: 3, amount_usd: 25, title: 3rd place}
+  - {kind: placement, place: 4, amount_usd: 10, title: 4th place}
+  - {kind: placement, place: 5, amount_usd: 10, title: 5th place}
+  - {kind: placement, place: 6, amount_usd: 10, title: 6th place}
+  - {kind: placement, place: 7, amount_usd: 10, title: 7th place}
+  - {kind: placement, place: 8, amount_usd: 10, title: 8th place}
+  - {kind: placement, place: 9, amount_usd: 10, title: 9th place}
+  - {kind: placement, place: 10, amount_usd: 10, title: 10th place}
+  - {kind: placement, place: 11, amount_usd: 7, title: 11th place}
+  - {kind: placement, place: 12, amount_usd: 7, title: 12th place}
+  - {kind: placement, place: 13, amount_usd: 7, title: 13th place}
+  - {kind: placement, place: 14, amount_usd: 7, title: 14th place}
+  - {kind: placement, place: 15, amount_usd: 7, title: 15th place}
+  - {kind: placement, place: 16, amount_usd: 7, title: 16th place}
+  - {kind: placement, place: 17, amount_usd: 7, title: 17th place}
+  - {kind: placement, place: 18, amount_usd: 7, title: 18th place}
+  - {kind: placement, place: 19, amount_usd: 7, title: 19th place}
+  - {kind: placement, place: 20, amount_usd: 7, title: 20th place}
+
+# A house entry holds the place it finishes in, unpaid, and no entry moves up (the owner; the Prizes section says so).
+house_holds_places: true
+
+limits:
+  cpus: 1
+  memory_mb: 1024
+  pids: 64
+  wall_budget_sec: 20
+
+# The efficiency view's authorship gate (bot-01's 0.80): no prize rides on that view.
+min_authored_coverage: 0.8
+
+# A placement prize needs a CPU time faster than every published house baseline's (the gate baseline: the
+# best value among the phase's ranked entries flagged baseline, marked itself here, entered by house.yaml 4 hours
+# before the deadline) at 95% confidence, one-sided, by the heat's interval of the difference of their trimmed means
+# (server/payouts/baseline.ts codeGateInterval): an entry that is not keeps its rank but is not prize-eligible, and a
+# place no eligible entry takes is not awarded. The rules text quotes it.
+prize_requires_beating_baseline: true
+
+# Full auto: the lock, the scored draw, the grades, the contenders' cut, the heat, the publication and the resolve;
+# autopay. Its escrow is funded at the deploy that seeds it open (escrow: at_open), within a minute and before entries
+# open, as the btc-race release template's is: payouts auto then pays from the reward wallet only when that escrow was
+# never funded (server/competitions/load.ts escrowAtOpenIssues, escrowPayoutsIssue). The final starts 10 minutes
+# (COMMIT_WINDOW_WARN_SECONDS) after the deadline, the commit window the escrow's entries root needs.
+automation:
+  lifecycle: true
+  payouts: auto
+  escrow: at_open
